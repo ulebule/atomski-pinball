@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="sl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>ATOMSKI PINBALL</title>
+<style>
+  html,body{margin:0;height:100%;background:#02030a;overflow:hidden;
+    font-family:"Courier New",monospace;-webkit-user-select:none;user-select:none;
+    -webkit-tap-highlight-color:transparent;touch-action:none;color:#bcd0ff;}
+  #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;}
+  #stage{position:relative;width:min(100vw,75vh);aspect-ratio:480/640;
+    box-shadow:0 0 60px rgba(60,120,255,.22),0 0 0 3px #141a33;
+    border-radius:12px;overflow:hidden;background:#02030a;touch-action:none;}
+  canvas{position:absolute;inset:0;width:100%;height:100%;
+    image-rendering:pixelated;display:block;touch-action:none;}
+  #crt{position:absolute;inset:0;pointer-events:none;z-index:5;
+    background:
+      repeating-linear-gradient(0deg,rgba(0,0,0,.24) 0,rgba(0,0,0,.24) 1px,
+                                     rgba(0,0,0,0) 2px,rgba(0,0,0,0) 3px),
+      radial-gradient(120% 120% at 50% 45%,rgba(0,0,0,0) 52%,rgba(0,0,0,.6) 100%);
+    mix-blend-mode:multiply;}
+  /* Touch controls */
+  #pad{position:absolute;inset:0;z-index:6;pointer-events:none;}
+  .zone{position:absolute;bottom:0;top:40%;pointer-events:auto;}
+  #zL{left:0;width:38%;}
+  #zR{right:0;width:38%;}
+  #zP{left:38%;right:38%;bottom:0;top:62%;pointer-events:auto;}
+  .hint{position:absolute;bottom:8px;font-size:11px;color:rgba(150,180,255,.5);
+    text-align:center;pointer-events:none;}
+  #zL .hint{left:0;right:0;}#zR .hint{left:0;right:0;}#zP .hint{left:0;right:0;}
+  #nudgeBtn{position:absolute;top:8px;right:8px;z-index:7;pointer-events:auto;
+    width:52px;height:52px;border-radius:50%;background:rgba(30,40,90,.5);
+    border:2px solid rgba(120,160,255,.5);color:#bcd0ff;font-size:20px;
+    display:flex;align-items:center;justify-content:center;}
+  #langBtn{position:absolute;top:8px;left:8px;z-index:7;pointer-events:auto;
+    padding:6px 10px;border-radius:8px;background:rgba(30,40,90,.5);
+    border:2px solid rgba(120,160,255,.5);color:#bcd0ff;font-size:13px;}
+  #muteBtn{position:absolute;top:8px;left:70px;z-index:7;pointer-events:auto;
+    width:40px;height:40px;border-radius:8px;background:rgba(30,40,90,.5);
+    border:2px solid rgba(120,160,255,.5);color:#bcd0ff;font-size:16px;}
+  @media (hover:hover) and (pointer:fine){#pad{display:none;}#nudgeBtn{display:none;}}
+  /* Name entry overlay */
+  #ov{position:absolute;inset:0;z-index:10;display:none;
+    align-items:center;justify-content:center;background:rgba(2,3,10,.72);}
+  #ovbox{background:#0a1030;border:2px solid #3a4a99;border-radius:12px;
+    padding:20px 22px;text-align:center;box-shadow:0 0 40px rgba(60,120,255,.3);}
+  #ovbox h2{margin:0 0 4px;font-size:18px;color:#ffd447;letter-spacing:2px;}
+  #ovbox p{margin:4px 0 12px;font-size:13px;color:#9fb6ff;}
+  #nm{font-family:"Courier New",monospace;font-size:22px;text-transform:uppercase;
+    text-align:center;letter-spacing:4px;width:180px;padding:8px;border-radius:8px;
+    border:2px solid #3a4a99;background:#02030a;color:#8ef0a0;outline:none;}
+  #ok{margin-top:14px;padding:10px 26px;font-size:15px;border-radius:8px;
+    border:2px solid #6a8aff;background:#1a2a66;color:#dfe8ff;font-weight:bold;}
+</style>
+</head>
+<body>
+<div id="wrap"><div id="stage">
+  <canvas id="c" width="480" height="640"></canvas>
+  <div id="crt"></div>
+  <div id="pad">
+    <div id="zL" class="zone"><div class="hint">◀ LEVA</div></div>
+    <div id="zR" class="zone"><div class="hint">DESNA ▶</div></div>
+    <div id="zP" class="zone"><div class="hint">▲ SPROŽI</div></div>
+  </div>
+  <button id="langBtn">SL</button>
+  <button id="muteBtn">♪</button>
+  <button id="nudgeBtn">↯</button>
+  <div id="ov"><div id="ovbox">
+    <h2 id="ovh">NOV REKORD!</h2>
+    <p id="ovp">Vpiši svoje ime</p>
+    <input id="nm" maxlength="12" autocomplete="off" spellcheck="false"
+           autocapitalize="characters" enterkeyhint="done" value="">
+    <br><button id="ok">OK</button>
+  </div></div>
+</div></div>
+<script>
+"use strict";
+/* ============================================================
+   ATOMSKI PINBALL — a tribute to Atari Video Pinball (1980)
+   Single-file canvas game. Top-down flipper table.
+   ============================================================ */
+const cv=document.getElementById('c'), X=cv.getContext('2d');
+const W=480,H=640,TAU=Math.PI*2,CX=W/2;
+
+/* ---- scores are stored locally in this browser (localStorage), no network ---- */
+
+/* ---------------------------- i18n ---------------------------- */
+const LANGS=['sl','en','de','it','fr'];
+const STR={
+  sl:{start:'TAPNI ali ENTER za start',launch:'DRŽI ▼ / SPROŽI za izstrelitev',
+      score:'TOČKE',ball:'ŽOGA',hi:'REKORD',over:'KONEC IGRE',
+      board:'NAJBOLJŠI',extra:'DODATNA ŽOGA!',tilt:'TILT!',
+      atari:'ATARI BONUS!',loading:'nalagam...',offline:'brez povezave — lokalno',
+      newrec:'NOV REKORD!',entername:'Vpiši svoje ime',again:'TAPNI za novo igro'},
+  en:{start:'TAP or ENTER to start',launch:'HOLD ▼ / LAUNCH to shoot',
+      score:'SCORE',ball:'BALL',hi:'HI-SCORE',over:'GAME OVER',
+      board:'HIGH SCORES',extra:'EXTRA BALL!',tilt:'TILT!',
+      atari:'ATARI BONUS!',loading:'loading...',offline:'offline — local scores',
+      newrec:'NEW RECORD!',entername:'Enter your name',again:'TAP to play again'},
+  de:{start:'TAP oder ENTER zum Start',launch:'▼ HALTEN / SCHIESSEN',
+      score:'PUNKTE',ball:'BALL',hi:'REKORD',over:'SPIEL VORBEI',
+      board:'BESTENLISTE',extra:'EXTRA BALL!',tilt:'TILT!',
+      atari:'ATARI BONUS!',loading:'lade...',offline:'offline — lokal',
+      newrec:'NEUER REKORD!',entername:'Name eingeben',again:'TAP für neues Spiel'},
+  it:{start:'TOCCA o INVIO per iniziare',launch:'TIENI ▼ / LANCIA',
+      score:'PUNTI',ball:'PALLA',hi:'RECORD',over:'GAME OVER',
+      board:'CLASSIFICA',extra:'PALLA EXTRA!',tilt:'TILT!',
+      atari:'BONUS ATARI!',loading:'carico...',offline:'offline — locale',
+      newrec:'NUOVO RECORD!',entername:'Inserisci il nome',again:'TOCCA per rigiocare'},
+  fr:{start:'TAP ou ENTRÉE pour jouer',launch:'MAINTENIR ▼ / LANCER',
+      score:'SCORE',ball:'BILLE',hi:'RECORD',over:'PARTIE TERMINÉE',
+      board:'MEILLEURS',extra:'BILLE EXTRA!',tilt:'TILT!',
+      atari:'BONUS ATARI!',loading:'chargement...',offline:'hors ligne — local',
+      newrec:'NOUVEAU RECORD!',entername:'Entrez votre nom',again:'TAP pour rejouer'},
+};
+function detectLang(){try{const l=(navigator.language||'sl').slice(0,2).toLowerCase();
+  return LANGS.includes(l)?l:'sl';}catch(e){return 'sl';}}
+let lang=detectLang();
+function T(k){return (STR[lang]&&STR[lang][k])||STR.en[k]||k;}
+
+/* ---------------------------- persistence ---------------------------- */
+function safeLS(k,v){try{if(v===undefined)return localStorage.getItem(k);
+  localStorage.setItem(k,v);}catch(e){return null;}}
+let hi=parseInt(safeLS('atompin_hi')||'0',10)||0;
+let localScores=[];
+try{localScores=JSON.parse(safeLS('atompin_board')||'[]')||[];}catch(e){localScores=[];}
+if(!Array.isArray(localScores))localScores=[];
+let lastEntry=null;   // the row just added, so it can be highlighted
+function saveLocalBoard(){safeLS('atompin_board',JSON.stringify(localScores.slice(0,10)));}
+
+/* ---------------------------- audio ---------------------------- */
+let AC=null,muted=false;
+function ac(){if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}}
+  if(AC&&AC.state==='suspended'){try{AC.resume();}catch(e){}}return AC;}
+function beep(freq,dur,type,vol){if(muted)return;const a=ac();if(!a)return;
+  const o=a.createOscillator(),g=a.createGain();
+  o.type=type||'square';o.frequency.value=freq;const t=a.currentTime;
+  g.gain.setValueAtTime(0.0001,t);
+  g.gain.exponentialRampToValueAtTime(vol||0.05,t+0.005);
+  g.gain.exponentialRampToValueAtTime(0.0001,t+(dur||0.08));
+  o.connect(g);g.connect(a.destination);o.start(t);o.stop(t+(dur||0.08)+0.02);}
+const sfx={
+  bump:()=>beep(520+Math.random()*120,0.06,'square',0.05),
+  ding:()=>beep(880,0.05,'square',0.045),
+  sling:()=>beep(300,0.07,'sawtooth',0.05),
+  flip:()=>beep(140,0.04,'square',0.04),
+  launch:()=>beep(200,0.18,'sawtooth',0.055),
+  spin:()=>beep(1200+Math.random()*300,0.02,'square',0.03),
+  drain:()=>[330,247,196].forEach((f,i)=>setTimeout(()=>beep(f,0.18,'triangle',0.06),i*140)),
+  extra:()=>[523,659,784,1046].forEach((f,i)=>setTimeout(()=>beep(f,0.12,'square',0.05),i*80)),
+  atari:()=>[659,784,988,1318].forEach((f,i)=>setTimeout(()=>beep(f,0.14,'square',0.05),i*90)),
+  over:()=>[440,330,262,196].forEach((f,i)=>setTimeout(()=>beep(f,0.24,'triangle',0.06),i*190)),
+};
+
+/* ---------------------------- game state ---------------------------- */
+let state='title';         // title | play | over
+let score=0, balls=3, ballNum=1;
+let inputLock=0;
+let perf=0;
+let shake=0;
+let flashMsg=null, flashT=0;
+let tilt=0, tiltWarn=0, nudgeX=0, nudgeY=0;   // table nudge
+let atariHits=0;           // hits on diamond logo -> extra ball at 4
+let letters=[false,false,false,false,false];  // A T A R I lit
+let bonusMult=1;
+
+/* ---------------------------- geometry ---------------------------- */
+const R=9;                 // ball radius
+const GRAV=1350;           // px/s^2
+// Static wall segments: {a,b,e,kick,slng}
+const WALLS=[];
+function seg(ax,ay,bx,by,e,kick,slng){WALLS.push({ax,ay,bx,by,e:e==null?0.45:e,kick:kick||0,slng:!!slng});}
+// Ceiling dome (left -> right)
+seg(16,120,58,80);
+seg(58,80,150,58);
+seg(150,58,300,58);
+seg(300,58,392,74);
+seg(392,74,440,110);
+seg(440,110,462,150);
+// Left wall
+seg(16,120,16,588);
+// Left drain wall (angles in to drain gap)
+seg(16,588,128,632);
+// Plunger lane divider (between field and lane)
+seg(430,150,430,600);
+// Right drain wall
+seg(430,600,300,632);
+// Plunger lane outer wall
+seg(462,150,462,624);
+// Plunger lane bottom
+seg(430,624,462,624);
+// Slingshots above the flippers (bouncy)
+seg(64,486,146,556,1.02,120,true);    // left slingshot hypotenuse
+seg(146,556,88,556,0.4);              // left sling base
+seg(366,486,284,556,1.02,120,true);   // right slingshot hypotenuse
+seg(284,556,344,556,0.4);             // right sling base
+
+/* Bumpers (round) and the ATARI diamond */
+const BUMPERS=[
+  {x:150,y:230,r:20,flash:0,score:100},
+  {x:300,y:230,r:20,flash:0,score:100},
+  {x:225,y:300,r:20,flash:0,score:100},
+];
+const DIAMOND={x:225,y:392,r:24,flash:0};   // the "Atari logo" bumper
+
+/* ATARI rollover targets across the top */
+const LETTERS=[
+  {ch:'A',x:120,y:130,lit:false},
+  {ch:'T',x:172,y:118,lit:false},
+  {ch:'A',x:225,y:112,lit:false},
+  {ch:'R',x:278,y:118,lit:false},
+  {ch:'I',x:330,y:130,lit:false},
+];
+const LETR=16;   // rollover radius
+
+/* Spinner lane on the left */
+const SPINNER={x:40,y:300,a:0,spin:0};
+
+/* Flippers */
+function mkFlip(px,py,len,rest,active,dir){
+  return {px,py,len,rest,active,dir,angle:rest,w:0,up:false};
+}
+// dir: +1 left flipper (points right-ish), -1 right flipper (points left-ish)
+const flipL=mkFlip(126,592,70,  0.40, -0.48, +1);   // rest angle downward-right
+const flipR=mkFlip(304,592,70, Math.PI-0.40, Math.PI+0.48, -1);
+const FLIP_SPEED=34;   // rad/s
+const FLIP_THICK=6;
+
+/* Ball */
+const ball={x:446,y:600,vx:0,vy:0,live:false,inLane:true};
+let plunger=0, plungerHold=false;   // 0..1 charge
+
+/* ---------------------------- helpers ---------------------------- */
+function clamp(v,a,b){return v<a?a:(v>b?b:v);}
+function closestOnSeg(px,py,ax,ay,bx,by){
+  const dx=bx-ax,dy=by-ay,l2=dx*dx+dy*dy;
+  let t=l2?((px-ax)*dx+(py-ay)*dy)/l2:0; t=clamp(t,0,1);
+  return {x:ax+dx*t,y:ay+dy*t,t};
+}
+
+/* ---------------------------- lifecycle ---------------------------- */
+function resetBallToLane(){
+  ball.x=446;ball.y=600;ball.vx=0;ball.vy=0;ball.live=false;ball.inLane=true;
+  plunger=0;plungerHold=false;
+}
+function startGame(){
+  score=0;balls=3;ballNum=1;atariHits=0;bonusMult=1;
+  letters.fill(false);LETTERS.forEach(l=>l.lit=false);
+  tilt=0;tiltWarn=0;
+  resetBallToLane();
+  state='play';lockInput(0.3);
+  loadBoard();
+}
+function launch(power){
+  if(state!=='play'||ball.live||!ball.inLane)return;
+  const p=power==null?(0.55+plunger*0.45):power;
+  ball.vy=-(760+p*720);
+  ball.vx=-10;
+  ball.live=true;ball.inLane=false;
+  plunger=0;plungerHold=false;
+  sfx.launch();
+}
+function loseBall(){
+  sfx.drain();
+  shake=Math.min(shake+8,14);
+  balls--;
+  if(balls<=0){endGame();return;}
+  ballNum++;tilt=0;tiltWarn=0;
+  resetBallToLane();
+  lockInput(0.25);
+}
+function endGame(){
+  state='over';lockInput(0.6);sfx.over();
+  if(score>hi){hi=score;safeLS('atompin_hi',String(hi));}
+  maybeEnterScore();
+}
+function lockInput(s){inputLock=s;}
+
+/* ---------------------------- flippers ---------------------------- */
+function flipTip(f){return {x:f.px+Math.cos(f.angle)*f.len,y:f.py+Math.sin(f.angle)*f.len};}
+function stepFlipper(f,h){
+  const target=f.up?f.active:f.rest;
+  let diff=target-f.angle;
+  const maxStep=FLIP_SPEED*h;
+  const stp=clamp(diff,-maxStep,maxStep);
+  f.angle+=stp;f.w=stp/h;
+}
+function collideFlipper(f){
+  const tip=flipTip(f);
+  const c=closestOnSeg(ball.x,ball.y,f.px,f.py,tip.x,tip.y);
+  let dx=ball.x-c.x,dy=ball.y-c.y;
+  let dist=Math.hypot(dx,dy);
+  const rr=R+FLIP_THICK;
+  if(dist<rr){
+    if(dist<0.0001){dx=0;dy=-1;dist=1;}
+    const nx=dx/dist,ny=dy/dist;
+    // surface velocity from rotation at contact point
+    const rvx=c.x-f.px, rvy=c.y-f.py;
+    const svx=-f.w*rvy, svy=f.w*rvx;
+    let relx=ball.vx-svx, rely=ball.vy-svy;
+    const vn=relx*nx+rely*ny;
+    // push out
+    ball.x+=nx*(rr-dist);ball.y+=ny*(rr-dist);
+    if(vn<0){
+      const e=0.35;
+      relx-=(1+e)*vn*nx;rely-=(1+e)*vn*ny;
+      ball.vx=relx+svx;ball.vy=rely+svy;
+      if(f.up&&Math.abs(f.w)>2){sfx.flip();}
+    }
+  }
+}
+
+/* ---------------------------- collisions ---------------------------- */
+function collideWall(s){
+  const c=closestOnSeg(ball.x,ball.y,s.ax,s.ay,s.bx,s.by);
+  let dx=ball.x-c.x,dy=ball.y-c.y,dist=Math.hypot(dx,dy);
+  if(dist<R){
+    if(dist<0.0001){dx=0;dy=-1;dist=1;}
+    const nx=dx/dist,ny=dy/dist;
+    ball.x+=nx*(R-dist);ball.y+=ny*(R-dist);
+    const vn=ball.vx*nx+ball.vy*ny;
+    if(vn<0){
+      ball.vx-=(1+s.e)*vn*nx;ball.vy-=(1+s.e)*vn*ny;
+      if(s.kick){ball.vx+=nx*s.kick;ball.vy+=ny*s.kick;}
+      if(s.slng){addScore(50);sfx.sling();shake=Math.min(shake+2,8);}
+    }
+  }
+}
+function collideBumper(b){
+  let dx=ball.x-b.x,dy=ball.y-b.y,dist=Math.hypot(dx,dy);
+  const rr=R+b.r;
+  if(dist<rr){
+    if(dist<0.0001){dx=0;dy=-1;dist=1;}
+    const nx=dx/dist,ny=dy/dist;
+    ball.x+=nx*(rr-dist);ball.y+=ny*(rr-dist);
+    const vn=ball.vx*nx+ball.vy*ny;
+    if(vn<0){
+      const e=0.5;
+      ball.vx-=(1+e)*vn*nx;ball.vy-=(1+e)*vn*ny;
+    }
+    // bumper kick
+    ball.vx+=nx*230;ball.vy+=ny*230;
+    b.flash=1;
+    addScore((b.score||100)*bonusMult);
+    sfx.bump();
+    shake=Math.min(shake+2,8);
+    return true;
+  }
+  return false;
+}
+function collideDiamond(){
+  // treat diamond as a rotated square; approximate with circle for physics
+  let dx=ball.x-DIAMOND.x,dy=ball.y-DIAMOND.y,dist=Math.hypot(dx,dy);
+  const rr=R+DIAMOND.r;
+  if(dist<rr){
+    if(dist<0.0001){dx=0;dy=-1;dist=1;}
+    const nx=dx/dist,ny=dy/dist;
+    ball.x+=nx*(rr-dist);ball.y+=ny*(rr-dist);
+    const vn=ball.vx*nx+ball.vy*ny;
+    if(vn<0){const e=0.55;ball.vx-=(1+e)*vn*nx;ball.vy-=(1+e)*vn*ny;}
+    ball.vx+=nx*300;ball.vy+=ny*300;
+    DIAMOND.flash=1;
+    addScore(500*bonusMult);
+    sfx.ding();
+    shake=Math.min(shake+3,10);
+    atariHits++;
+    if(atariHits>=4){atariHits=0;balls++;flash(T('extra'));sfx.extra();}
+    return true;
+  }
+  return false;
+}
+function checkLetters(){
+  for(const l of LETTERS){
+    if(l.lit)continue;
+    if(Math.hypot(ball.x-l.x,ball.y-l.y)<R+LETR){
+      l.lit=true;addScore(300*bonusMult);sfx.ding();
+      if(LETTERS.every(x=>x.lit)){
+        addScore(5000*bonusMult);
+        bonusMult=Math.min(bonusMult+1,5);
+        flash(T('atari'));sfx.atari();
+        setTimeout(()=>{LETTERS.forEach(x=>x.lit=false);},900);
+      }
+    }
+  }
+}
+function checkSpinner(){
+  if(Math.abs(ball.x-SPINNER.x)<18 && ball.y>SPINNER.y-40 && ball.y<SPINNER.y+40){
+    if(Math.abs(ball.vy)>60){
+      SPINNER.spin=Math.min(SPINNER.spin+Math.abs(ball.vy)*0.0006,0.6);
+      SPINNER.a+=SPINNER.spin;
+      if(Math.random()<0.25){addScore(10*bonusMult);sfx.spin();}
+    }
+  }
+}
+function addScore(n){score+=Math.round(n);}
+function flash(msg){flashMsg=msg;flashT=1.6;}
+
+/* ---------------------------- update ---------------------------- */
+function update(dt){
+  if(inputLock>0)inputLock-=dt;
+  if(flashT>0)flashT-=dt;
+  if(shake>0)shake=Math.max(0,shake-40*dt);
+  // decay flashes
+  BUMPERS.forEach(b=>b.flash*=Math.pow(0.02,dt));
+  DIAMOND.flash*=Math.pow(0.02,dt);
+  SPINNER.spin*=Math.pow(0.05,dt);SPINNER.a+=SPINNER.spin*60*dt;
+  if(tiltWarn>0)tiltWarn-=dt;
+  // nudge decay
+  nudgeX*=Math.pow(0.001,dt);nudgeY*=Math.pow(0.001,dt);
+
+  if(state!=='play')return;
+
+  // plunger charge
+  if(!ball.live&&ball.inLane){
+    if(plungerHold)plunger=Math.min(1,plunger+dt*1.6);
+  }
+
+  const N=8,h=dt/N;
+  for(let i=0;i<N;i++){
+    // flippers step every substep (unless tilted -> flippers dead)
+    if(tilt<=0){stepFlipper(flipL,h);stepFlipper(flipR,h);}
+    else{flipL.up=false;flipR.up=false;stepFlipper(flipL,h);stepFlipper(flipR,h);}
+
+    if(!ball.live){
+      // resting/charging in lane: gentle settle at plunger
+      ball.x=446;
+      const rest=600 - plunger*22;
+      ball.y+=(rest-ball.y)*Math.min(1,h*20);
+      continue;
+    }
+    // gravity + nudge
+    ball.vy+=GRAV*h;
+    ball.vx+=nudgeX; ball.vy+=nudgeY; nudgeX*=0.5; nudgeY*=0.5;
+    // integrate
+    ball.x+=ball.vx*h; ball.y+=ball.vy*h;
+    // clamp speed
+    const sp=Math.hypot(ball.vx,ball.vy),MX=1500;
+    if(sp>MX){ball.vx*=MX/sp;ball.vy*=MX/sp;}
+    // collisions
+    for(const s of WALLS)collideWall(s);
+    for(const b of BUMPERS)collideBumper(b);
+    collideDiamond();
+    if(tilt<=0){collideFlipper(flipL);collideFlipper(flipR);}
+    checkLetters();
+    checkSpinner();
+    // drain?
+    if(ball.y>H+30){loseBall();break;}
+  }
+}
+
+/* ---------------------------- render ---------------------------- */
+function text(t,x,y,size,col,align){
+  X.fillStyle=col;X.textAlign=align||'center';X.textBaseline='middle';
+  X.font='bold '+size+'px "Courier New",monospace';X.fillText(t,x,y);
+}
+function drawTable(){
+  // playfield gradient
+  const g=X.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,'#0a1235');g.addColorStop(0.5,'#0a0f28');g.addColorStop(1,'#05070f');
+  X.fillStyle=g;X.fillRect(0,0,W,H);
+
+  // decorative center glow ring
+  X.strokeStyle='rgba(80,120,255,.08)';X.lineWidth=2;
+  for(let r=40;r<220;r+=34){X.beginPath();X.arc(225,300,r,0,TAU);X.stroke();}
+
+  // walls
+  X.lineCap='round';
+  for(const s of WALLS){
+    X.strokeStyle=s.slng?'#ff5d73':'#3550b0';
+    X.lineWidth=s.slng?7:5;
+    X.beginPath();X.moveTo(s.ax,s.ay);X.lineTo(s.bx,s.by);X.stroke();
+  }
+  // plunger lane tint
+  X.fillStyle='rgba(60,80,160,.08)';X.fillRect(430,150,32,474);
+
+  // spinner
+  X.save();X.translate(SPINNER.x,SPINNER.y);X.rotate(SPINNER.a);
+  X.strokeStyle='#6ad0ff';X.lineWidth=3;
+  X.beginPath();X.moveTo(0,-22);X.lineTo(0,22);X.stroke();
+  X.fillStyle='#6ad0ff';X.beginPath();X.arc(0,0,4,0,TAU);X.fill();
+  X.restore();
+  text('10',SPINNER.x,SPINNER.y+34,10,'#4a6acc');
+
+  // ATARI letters
+  LETTERS.forEach(l=>{
+    X.beginPath();X.arc(l.x,l.y,LETR,0,TAU);
+    X.fillStyle=l.lit?'rgba(255,200,60,.9)':'rgba(40,55,120,.6)';
+    X.fill();
+    X.lineWidth=2;X.strokeStyle=l.lit?'#ffe088':'#4a63c0';X.stroke();
+    text(l.ch,l.x,l.y+1,17,l.lit?'#3a2600':'#8ea6ff');
+  });
+
+  // round bumpers
+  BUMPERS.forEach(b=>{
+    const f=b.flash;
+    X.beginPath();X.arc(b.x,b.y,b.r+3,0,TAU);
+    X.fillStyle='rgba(30,40,90,.9)';X.fill();
+    X.beginPath();X.arc(b.x,b.y,b.r,0,TAU);
+    const bg=X.createRadialGradient(b.x-5,b.y-5,2,b.x,b.y,b.r);
+    bg.addColorStop(0,f>0.1?'#ffffff':'#7fd0ff');
+    bg.addColorStop(1,f>0.1?'#ffd447':'#2a6ad0');
+    X.fillStyle=bg;X.fill();
+    X.lineWidth=3;X.strokeStyle=f>0.1?'#fff':'#8fe0ff';X.stroke();
+    text('100',b.x,b.y,11,f>0.1?'#3a2600':'#04203f');
+  });
+
+  // diamond (Atari logo bumper)
+  X.save();X.translate(DIAMOND.x,DIAMOND.y);
+  const f=DIAMOND.flash;
+  X.rotate(Math.PI/4);
+  const s=DIAMOND.r*1.35;
+  X.fillStyle=f>0.1?'#ffffff':'#1c2a66';
+  X.strokeStyle=f>0.1?'#ffd447':'#ff5d73';X.lineWidth=4;
+  X.beginPath();X.rect(-s/2,-s/2,s,s);X.fill();X.stroke();
+  X.restore();
+  // Atari "fuji" style mark
+  X.fillStyle=f>0.1?'#c0392b':'#ff5d73';
+  for(let i=-1;i<=1;i++){
+    X.save();X.translate(DIAMOND.x+i*7,DIAMOND.y);
+    const hgt=i===0?18:12;
+    X.beginPath();X.moveTo(-2,-hgt/2);X.lineTo(2,-hgt/2);
+    X.lineTo(4,hgt/2);X.lineTo(-4,hgt/2);X.closePath();X.fill();
+    X.restore();
+  }
+  // extra-ball progress pips under diamond
+  for(let i=0;i<4;i++){
+    X.beginPath();X.arc(DIAMOND.x-18+i*12,DIAMOND.y+DIAMOND.r+14,3.5,0,TAU);
+    X.fillStyle=i<atariHits?'#ffd447':'#31407a';X.fill();
+  }
+
+  // flippers
+  [flipL,flipR].forEach(fl=>{
+    const tip=flipTip(fl);
+    X.lineCap='round';X.lineWidth=FLIP_THICK*2;
+    X.strokeStyle=tilt>0?'#555':'#e8ecff';
+    X.beginPath();X.moveTo(fl.px,fl.py);X.lineTo(tip.x,tip.y);X.stroke();
+    X.fillStyle='#9fb0e0';X.beginPath();X.arc(fl.px,fl.py,6,0,TAU);X.fill();
+  });
+
+  // ball
+  if(state==='play'||state==='over'){
+    const bg=X.createRadialGradient(ball.x-3,ball.y-3,1,ball.x,ball.y,R);
+    bg.addColorStop(0,'#ffffff');bg.addColorStop(1,'#8a97b8');
+    X.fillStyle=bg;X.beginPath();X.arc(ball.x,ball.y,R,0,TAU);X.fill();
+    X.strokeStyle='#c8d2f0';X.lineWidth=1;X.stroke();
+  }
+
+  // plunger indicator
+  if(!ball.live&&ball.inLane&&state==='play'){
+    X.fillStyle='#31407a';X.fillRect(438,606,16,18);
+    X.fillStyle='#ff9f4a';X.fillRect(438,606+ (1-plunger)*14, 16, 4+plunger*14);
+  }
+}
+function drawHUD(){
+  // top bar
+  X.fillStyle='rgba(2,4,14,.55)';X.fillRect(0,0,W,50);
+  text(T('score'),86,14,11,'#7fa0ff','left');
+  text(String(score).padStart(7,'0'),86,32,22,'#ffd447','left');
+  text(T('hi'),W-16,14,11,'#7fa0ff','right');
+  text(String(hi).padStart(7,'0'),W-16,32,16,'#8ef0a0','right');
+  // balls
+  text(T('ball')+' '+ballNum,CX,14,11,'#7fa0ff');
+  for(let i=0;i<balls;i++){
+    X.beginPath();X.arc(CX-14+i*14,34,4,0,TAU);
+    X.fillStyle='#e8ecff';X.fill();
+  }
+  if(bonusMult>1)text('x'+bonusMult,CX+40,34,13,'#ff9f4a');
+}
+function drawBoardList(top){
+  text(T('board'),CX,top,15,'#7fa0ff');
+  const rows=localScores.slice(0,6);
+  rows.forEach((h,i)=>{
+    const y=top+28+i*22;
+    const mine=(h===lastEntry);
+    text((i+1)+'.',CX-96,y,14,mine?'#8ef0a0':'#5f7ad0','left');
+    text(String(h.name||'???').slice(0,10),CX-72,y,14,mine?'#8ef0a0':'#dfe8ff','left');
+    text(String(h.score).padStart(6,'0'),CX+96,y,14,mine?'#8ef0a0':'#ffd447','right');
+  });
+  if(rows.length===0)text('—',CX,top+40,14,'#5f7ad0');
+}
+function drawTitle(){
+  drawTable();
+  X.fillStyle='rgba(2,4,14,.66)';X.fillRect(0,0,W,H);
+  text('ATOMSKI',CX,120,44,'#ff5d73');
+  text('PINBALL',CX,168,44,'#ffd447');
+  text('◇ po vzoru Atari Video Pinball ◇',CX,206,12,'#7fa0ff');
+  drawBoardList(258);
+  if(Math.floor(perf/500)%2===0)
+    text(T('start'),CX,470,16,'#8ef0a0');
+  text('◀ ▶ '+ (lang==='sl'?'zaklopci':'flippers')+'   ·   ▼/'+(lang==='sl'?'presledek sproži':'space launch'),CX,520,11,'#5f7ad0');
+  text(String(hi).padStart(7,'0')+'  '+T('hi'),CX,560,12,'#7fa0ff');
+}
+function drawOver(){
+  drawTable();
+  X.fillStyle='rgba(2,4,14,.72)';X.fillRect(0,0,W,H);
+  text(T('over'),CX,140,40,'#ff5d73');
+  text(T('score'),CX,196,13,'#7fa0ff');
+  text(String(score).padStart(7,'0'),CX,224,30,'#ffd447');
+  drawBoardList(280);
+  if(Math.floor(perf/500)%2===0)
+    text(T('again'),CX,540,15,'#8ef0a0');
+}
+function render(){
+  X.clearRect(0,0,W,H);
+  X.save();
+  if(shake>0){X.translate((Math.random()-0.5)*shake,(Math.random()-0.5)*shake);}
+  if(state==='title')drawTitle();
+  else if(state==='over')drawOver();
+  else{drawTable();drawHUD();}
+  // flash message
+  if(flashT>0&&flashMsg){
+    const a=clamp(flashT/1.6,0,1);
+    X.globalAlpha=a;
+    text(flashMsg,CX,300,30,'#ffd447');
+    X.globalAlpha=1;
+  }
+  if(tilt>0){
+    if(Math.floor(perf/200)%2===0)text('TILT!',CX,470,34,'#ff3355');
+  }
+  X.restore();
+}
+
+/* ---------------------------- loop ---------------------------- */
+let last=0;
+function frame(ts){
+  requestAnimationFrame(frame);
+  if(!last)last=ts;
+  let dt=(ts-last)/1000;last=ts;perf=ts;
+  if(dt>0.05)dt=0.05;
+  update(dt);
+  render();
+}
+requestAnimationFrame(frame);
+
+/* ---------------------------- input ---------------------------- */
+function primaryAction(){
+  ac();
+  if(inputLock>0)return;
+  if(state==='title'){startGame();return;}
+  if(state==='over'){state='title';loadBoard();lockInput(0.3);return;}
+}
+function doNudge(dirx){
+  if(state!=='play')return;
+  nudgeX+=dirx*70; nudgeY-=40;
+  tiltWarn+=1;
+  shake=Math.min(shake+4,12);
+  if(tiltWarn>=3){tilt=1;flash(T('tilt'));}
+}
+// keyboard
+addEventListener('keydown',e=>{
+  if(ov.style.display==='flex')return;   // overlay owns keys
+  if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' '].includes(e.key))e.preventDefault();
+  if(e.repeat)return;
+  ac();
+  if(e.key==='ArrowLeft'){flipL.up=true;sfx.flip();}
+  else if(e.key==='ArrowRight'){flipR.up=true;sfx.flip();}
+  else if(e.key==='ArrowDown'){plungerHold=true;}
+  else if(e.key==='ArrowUp'||e.code==='Space'){
+    if(state==='play'&&ball.inLane&&!ball.live){launch();}
+    else primaryAction();
+  }
+  else if(e.key==='Enter'){primaryAction();}
+  else if(e.key==='z'||e.key==='Z'){doNudge(-1);}
+  else if(e.key==='x'||e.key==='X'){doNudge(1);}
+  else if(e.key==='m'||e.key==='M'){toggleMute();}
+});
+addEventListener('keyup',e=>{
+  if(e.key==='ArrowLeft')flipL.up=false;
+  else if(e.key==='ArrowRight')flipR.up=false;
+  else if(e.key==='ArrowDown'){plungerHold=false;
+    if(state==='play'&&ball.inLane&&!ball.live)launch();}
+});
+// touch zones
+function bindZone(id,onDown,onUp){
+  const el=document.getElementById(id);
+  const d=e=>{e.preventDefault();ac();onDown();};
+  const u=e=>{e.preventDefault();if(onUp)onUp();};
+  el.addEventListener('touchstart',d,{passive:false});
+  el.addEventListener('touchend',u,{passive:false});
+  el.addEventListener('touchcancel',u,{passive:false});
+  el.addEventListener('mousedown',d);
+  el.addEventListener('mouseup',u);
+  el.addEventListener('mouseleave',u);
+}
+bindZone('zL',()=>{
+  if(state==='play'){flipL.up=true;sfx.flip();}else primaryAction();
+},()=>{flipL.up=false;});
+bindZone('zR',()=>{
+  if(state==='play'){flipR.up=true;sfx.flip();}else primaryAction();
+},()=>{flipR.up=false;});
+bindZone('zP',()=>{
+  if(state==='play'&&ball.inLane&&!ball.live){plungerHold=true;}
+  else primaryAction();
+},()=>{
+  if(state==='play'&&ball.inLane&&!ball.live)launch();
+});
+document.getElementById('nudgeBtn').addEventListener('click',e=>{e.preventDefault();
+  doNudge(Math.random()<0.5?-1:1);});
+// lang + mute buttons
+const langBtn=document.getElementById('langBtn');
+langBtn.addEventListener('click',e=>{e.preventDefault();
+  lang=LANGS[(LANGS.indexOf(lang)+1)%LANGS.length];langBtn.textContent=lang.toUpperCase();});
+langBtn.textContent=lang.toUpperCase();
+const muteBtn=document.getElementById('muteBtn');
+function toggleMute(){muted=!muted;muteBtn.textContent=muted?'✕':'♪';}
+muteBtn.addEventListener('click',e=>{e.preventDefault();toggleMute();});
+
+/* ---------------------------- local score table ---------------------------- */
+function loadBoard(){ /* local only — localScores is already read from storage */ }
+function qualifies(sc){
+  return sc>0 && (localScores.length<10 || sc>(localScores[localScores.length-1].score||0));
+}
+// name overlay
+const ov=document.getElementById('ov'),nm=document.getElementById('nm'),okBtn=document.getElementById('ok');
+let overlayOpen=false;
+function maybeEnterScore(){
+  if(!qualifies(score))return;
+  overlayOpen=true;
+  document.getElementById('ovh').textContent=T('newrec');
+  document.getElementById('ovp').textContent=T('entername');
+  nm.value=(safeLS('atompin_name')||'').toUpperCase();
+  ov.style.display='flex';
+  setTimeout(()=>{try{nm.focus();}catch(e){}},50);
+}
+function submitName(){
+  let n=(nm.value||'').trim().toUpperCase().replace(/[^ -~]/g,'').slice(0,12)||'???';
+  safeLS('atompin_name',n);
+  ov.style.display='none';overlayOpen=false;
+  const entry={name:n,score:score};
+  localScores.push(entry);
+  localScores.sort((a,b)=>b.score-a.score);
+  localScores=localScores.slice(0,10);
+  lastEntry=entry;                 // highlight the player's own row
+  saveLocalBoard();
+  lockInput(0.3);
+}
+okBtn.addEventListener('click',e=>{e.preventDefault();submitName();});
+nm.addEventListener('keydown',e=>{e.stopPropagation();
+  if(e.key==='Enter'){e.preventDefault();submitName();}});
+nm.addEventListener('keyup',e=>e.stopPropagation());
+
+/* ---------------------------- test hook ---------------------------- */
+window.__game={ball,flipL,flipR,startGame,launch,
+  flip(side,down){(side==='L'?flipL:flipR).up=down;},
+  nudge:doNudge,
+  get state(){return state;},get score(){return score;},
+  get balls(){return balls;},get atariHits(){return atariHits;},
+  setBall(x,y,vx,vy){ball.x=x;ball.y=y;ball.vx=vx||0;ball.vy=vy||0;ball.live=true;ball.inLane=false;},
+};
+loadBoard();
+</script>
+</body>
+</html>
