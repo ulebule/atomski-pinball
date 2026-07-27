@@ -88,34 +88,53 @@ const W=480,H=640,TAU=Math.PI*2,CX=W/2;
 /* ---------------------------- i18n ---------------------------- */
 const LANGS=['sl','en','de','it','fr'];
 const STR={
-  sl:{start:'TAPNI ali ENTER za start',launch:'DRŽI ▼ / SPROŽI za izstrelitev',
+  sl:{
+      sub:'◇ po vzoru Atari Video Pinball ◇',hint:'◀ ▶ zaklopci   ·   ▼/presledek sproži',
+      zL:'◀ LEVA',zR:'DESNA ▶',zP:'▲ SPROŽI',
+      start:'TAPNI ali ENTER za start',launch:'DRŽI ▼ / SPROŽI za izstrelitev',
       score:'TOČKE',ball:'ŽOGA',hi:'REKORD',over:'KONEC IGRE',
       board:'NAJBOLJŠI',extra:'DODATNA ŽOGA!',tilt:'TILT!',
       atari:'ATARI BONUS!',loading:'nalagam...',offline:'brez povezave — lokalno',
       newrec:'NOV REKORD!',entername:'Vpiši svoje ime',again:'TAPNI za novo igro'},
-  en:{start:'TAP or ENTER to start',launch:'HOLD ▼ / LAUNCH to shoot',
+  en:{
+      sub:'◇ after Atari Video Pinball ◇',hint:'◀ ▶ flippers   ·   ▼/space launches',
+      zL:'◀ LEFT',zR:'RIGHT ▶',zP:'▲ LAUNCH',
+      start:'TAP or ENTER to start',launch:'HOLD ▼ / LAUNCH to shoot',
       score:'SCORE',ball:'BALL',hi:'HI-SCORE',over:'GAME OVER',
       board:'HIGH SCORES',extra:'EXTRA BALL!',tilt:'TILT!',
       atari:'ATARI BONUS!',loading:'loading...',offline:'offline — local scores',
       newrec:'NEW RECORD!',entername:'Enter your name',again:'TAP to play again'},
-  de:{start:'TAP oder ENTER zum Start',launch:'▼ HALTEN / SCHIESSEN',
+  de:{
+      sub:'◇ nach Atari Video Pinball ◇',hint:'◀ ▶ Flipper   ·   ▼/Leertaste schießt',
+      zL:'◀ LINKS',zR:'RECHTS ▶',zP:'▲ ABSCHUSS',
+      start:'TAP oder ENTER zum Start',launch:'▼ HALTEN / SCHIESSEN',
       score:'PUNKTE',ball:'BALL',hi:'REKORD',over:'SPIEL VORBEI',
       board:'BESTENLISTE',extra:'EXTRA BALL!',tilt:'TILT!',
       atari:'ATARI BONUS!',loading:'lade...',offline:'offline — lokal',
       newrec:'NEUER REKORD!',entername:'Name eingeben',again:'TAP für neues Spiel'},
-  it:{start:'TOCCA o INVIO per iniziare',launch:'TIENI ▼ / LANCIA',
+  it:{
+      sub:'◇ ispirato a Atari Video Pinball ◇',hint:'◀ ▶ flipper   ·   ▼/spazio lancia',
+      zL:'◀ SINISTRA',zR:'DESTRA ▶',zP:'▲ LANCIA',
+      start:'TOCCA o INVIO per iniziare',launch:'TIENI ▼ / LANCIA',
       score:'PUNTI',ball:'PALLA',hi:'RECORD',over:'GAME OVER',
       board:'CLASSIFICA',extra:'PALLA EXTRA!',tilt:'TILT!',
       atari:'BONUS ATARI!',loading:'carico...',offline:'offline — locale',
       newrec:'NUOVO RECORD!',entername:'Inserisci il nome',again:'TOCCA per rigiocare'},
-  fr:{start:'TAP ou ENTRÉE pour jouer',launch:'MAINTENIR ▼ / LANCER',
+  fr:{
+      sub:'◇ d’après Atari Video Pinball ◇',hint:'◀ ▶ flippers   ·   ▼/espace lance',
+      zL:'◀ GAUCHE',zR:'DROITE ▶',zP:'▲ LANCER',
+      start:'TAP ou ENTRÉE pour jouer',launch:'MAINTENIR ▼ / LANCER',
       score:'SCORE',ball:'BILLE',hi:'RECORD',over:'PARTIE TERMINÉE',
       board:'MEILLEURS',extra:'BILLE EXTRA!',tilt:'TILT!',
       atari:'BONUS ATARI!',loading:'chargement...',offline:'hors ligne — local',
       newrec:'NOUVEAU RECORD!',entername:'Entrez votre nom',again:'TAP pour rejouer'},
 };
-function detectLang(){try{const l=(navigator.language||'sl').slice(0,2).toLowerCase();
-  return LANGS.includes(l)?l:'sl';}catch(e){return 'sl';}}
+function detectLang(){try{
+  const saved=localStorage.getItem('pinball_lang');
+  if(saved&&LANGS.includes(saved)) return saved;
+  const list=(navigator.languages&&navigator.languages.length)?navigator.languages:[navigator.language||'sl'];
+  for(const raw of list){const l=String(raw).slice(0,2).toLowerCase(); if(LANGS.includes(l)) return l;}
+  return 'sl';}catch(e){return 'sl';}}
 let lang=detectLang();
 function T(k){return (STR[lang]&&STR[lang][k])||STR.en[k]||k;}
 
@@ -584,11 +603,11 @@ function drawTitle(){
   X.fillStyle='rgba(2,4,14,.66)';X.fillRect(0,0,W,H);
   text('ATOMSKI',CX,120,44,'#ff5d73');
   text('PINBALL',CX,168,44,'#ffd447');
-  text('◇ po vzoru Atari Video Pinball ◇',CX,206,12,'#7fa0ff');
+  text(T('sub'),CX,206,12,'#7fa0ff');
   drawBoardList(258);
   if(Math.floor(perf/500)%2===0)
     text(T('start'),CX,470,16,'#8ef0a0');
-  text('◀ ▶ '+ (lang==='sl'?'zaklopci':'flippers')+'   ·   ▼/'+(lang==='sl'?'presledek sproži':'space launch'),CX,520,11,'#5f7ad0');
+  text(T('hint'),CX,520,11,'#5f7ad0');
   text(String(hi).padStart(7,'0')+'  '+T('hi'),CX,560,12,'#7fa0ff');
 }
 function drawOver(){
@@ -616,7 +635,7 @@ function render(){
     X.globalAlpha=1;
   }
   if(tilt>0){
-    if(Math.floor(perf/200)%2===0)text('TILT!',CX,470,34,'#ff3355');
+    if(Math.floor(perf/200)%2===0)text(T('tilt'),CX,470,34,'#ff3355');
   }
   X.restore();
 }
@@ -699,9 +718,22 @@ document.getElementById('nudgeBtn').addEventListener('click',e=>{e.preventDefaul
   doNudge(Math.random()<0.5?-1:1);});
 // lang + mute buttons
 const langBtn=document.getElementById('langBtn');
+/* every language-dependent DOM string lives here, so switching updates all of them */
+function applyLang(){
+  langBtn.textContent=lang.toUpperCase();
+  const z={zL:'zL',zR:'zR',zP:'zP'};
+  for(const id in z){
+    const el=document.querySelector('#'+id+' .hint');
+    if(el) el.textContent=T(z[id]);
+  }
+  const h=document.getElementById('ovh'), p=document.getElementById('ovp');
+  if(h) h.textContent=T('newrec');
+  if(p) p.textContent=T('entername');
+  try{ document.documentElement.lang=lang; localStorage.setItem('pinball_lang',lang); }catch(e){}
+}
 langBtn.addEventListener('click',e=>{e.preventDefault();
-  lang=LANGS[(LANGS.indexOf(lang)+1)%LANGS.length];langBtn.textContent=lang.toUpperCase();});
-langBtn.textContent=lang.toUpperCase();
+  lang=LANGS[(LANGS.indexOf(lang)+1)%LANGS.length];applyLang();});
+applyLang();
 const muteBtn=document.getElementById('muteBtn');
 function toggleMute(){muted=!muted;muteBtn.textContent=muted?'✕':'♪';}
 muteBtn.addEventListener('click',e=>{e.preventDefault();toggleMute();});
