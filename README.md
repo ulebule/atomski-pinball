@@ -1,40 +1,46 @@
 # ATOMSKI PINBALL
 
-Retro flipper v brskalniku, po vzoru **Atari Video Pinball (1980)**.
-Vse je v eni sami datoteki `index.html` — brez knjižnic, brez gradnje,
-brez omrežnih klicev. Dvojni klik in igraš.
+A retro pinball table in the browser, modelled on **Atari Video Pinball
+(1980)**. Everything sits in a single `index.html` — no libraries, no
+build step, no network calls. Double-click it and play.
 
-## Igraj
+**[▶ Play it here](https://ulebule.github.io/atomski-pinball/)**
 
-Odpri `index.html` v brskalniku, ali obišči objavljeno stran (GitHub Pages).
+## Play
 
-## Kontrole
+Open `index.html` in a browser, or visit the published page on GitHub
+Pages.
 
-| Tipka | Dejanje |
+## Controls
+
+| Key | Action |
 |---|---|
-| `◀` `▶` | levi / desni zaklopec |
-| `▼` ali `presledek` | napni in sproži žogo |
-| `Z` / `X` | nudge (sunek v mizo) |
-| `Enter` | start / nova igra |
-| `M` | zvok vklop / izklop |
+| `◀` `▶` | left / right flipper |
+| `▼` or `Space` | pull back and launch the ball |
+| `Z` / `X` | nudge (a shove against the table) |
+| `Enter` | start / new game |
+| `M` | sound on / off |
 
-Na dotik: leva in desna tretjina zaslona sta zaklopca, spodnji srednji del
-je vzmet, gumb `↯` zgoraj desno je nudge.
+On a touch screen the left and right thirds of the screen are the
+flippers, the bottom middle is the plunger, and the `↯` button in the top
+right is the nudge.
 
-## Miza
+## The table
 
-- **trije okrogli odbijači** — 100 točk
-- **Atari diamant** v sredini — 500 točk; štirje zadetki prinesejo **dodatno žogo**
-- **A-T-A-R-I** rolloverji na vrhu — 300 točk vsak, vseh pet prižganih da
-  **5000 točk** in poveča množitelj (do x5)
-- **vrtavka** ob levem robu — 10 točk na vrtljaj
-- **prožilca** (slingshota) nad zaklopcema — 50 točk
-- **tilt**: trije sunki zapored zaklenejo zaklopca do izgube žoge
+- **three round bumpers** — 100 points
+- **Atari diamond** in the middle — 500 points; four hits award an
+  **extra ball**
+- **A-T-A-R-I** rollovers along the top — 300 points each, and lighting
+  all five scores **5000 points** and raises the multiplier (up to x5)
+- **spinner** on the left edge — 10 points per revolution
+- **slingshots** above the flippers — 50 points
+- **tilt**: three nudges in a row lock the flippers until the ball drains
 
-Tri žoge na igro. Rekord in lestvica najboljših desetih se shranjujeta
-lokalno v brskalniku (`localStorage`) — vezano na napravo in brskalnik.
+Three balls per game. The hi-score and the top-ten table are stored
+locally in the browser (`localStorage`) — tied to that device and
+browser.
 
-## Jeziki
+## Languages
 
-Vmesnik zazna jezik naprave; z gumbom zgoraj levo se vrti med
-slovenščino, angleščino, nemščino, italijanščino in francoščino.
+The interface detects the device language; the button in the top left
+cycles through Slovenian, English, German, Italian and French.
