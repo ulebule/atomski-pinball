@@ -44,3 +44,14 @@ browser.
 
 The interface detects the device language; the button in the top left
 cycles through Slovenian, English, German, Italian and French.
+
+## Install it
+
+The game is a PWA: a browser will offer to add it to the home screen (on iOS,
+Share → *Add to Home Screen*), and it then opens standalone, without browser
+chrome. A service worker caches `index.html`, the manifest and the icons, so
+after the first visit the game **runs with no connection at all**.
+
+The worker only touches same-origin requests, and the cache key is prefixed
+with the repo name — the other games published under `ulebule.github.io` keep
+their own caches instead of evicting each other.
