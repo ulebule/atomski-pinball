@@ -65,9 +65,11 @@
      The language and sound buttons were ~31-40px; a fingertip wants ~44px.
      Coarse pointers only. */
   @media (pointer:coarse){
-    #langBtn{min-width:52px;min-height:46px;padding:0 10px;font-size:15px;}
-    #muteBtn{left:66px;width:46px;height:46px;font-size:18px;}
-    #nudgeBtn{width:56px;height:56px;font-size:22px;}
+    /* Dropped below the score strip the game draws across the top ~7% of the
+       canvas — at finger size these buttons used to sit on top of it. */
+    #langBtn{top:9%;min-width:52px;min-height:46px;padding:0 10px;font-size:15px;}
+    #muteBtn{top:9%;left:66px;width:46px;height:46px;font-size:18px;}
+    #nudgeBtn{top:9%;width:56px;height:56px;font-size:22px;}
     #ok{min-height:48px;padding:0 30px;font-size:17px;}
   }
 </style>
